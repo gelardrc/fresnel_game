@@ -57,14 +57,42 @@ botao = pygame_gui.elements.UIButton(
 )
 
 # Posição e altura da antena
-rx_pose = [200, 500]
+tx_angle = math.pi/2
 rx_high = 100
 tx_high = 100
 distance = 100
+earth_radius = 500  
+earth_center = (LARGURA/2, ALTURA+earth_radius/2)
 
-# Função para desenhar antena
+# Variável para rotação
+earth_angle = 0
+velocidade_rotacao = 10  # graus por segundo
+
+
+#earth_center = (LARGURA/2, earth_radius/2)
+ceu = pygame.image.load("ceu.jpg").convert_alpha()
+ceu = pygame.transform.scale(ceu, (LARGURA, ALTURA))
+
+earth_pic = pygame.image.load("earth.png").convert_alpha()
+earth_pic = pygame.transform.scale(earth_pic, (2*earth_radius, earth_radius))  # largura = 2r, altura = r
+
+
+sprite_antena = pygame.image.load("antena.png").convert_alpha()
+ 
+ceu_offset = 0  
+velocidade_ceu = 50  # pixels por segundo
+
+#sprite_antena = pygame.transform.scale(sprite_antena, (40, 80))  # ajuste de tamanho
+
+# Função para desenhar antena com sprite
 def draw_antena(pose, high, cor):
-    pygame.draw.rect(janela, cor, (pose[0], pose[1]-high, 10, high))
+    # Base da antena está em pose[0], pose[1]
+    # Redimensiona de acordo com "high"
+    antena_resized = pygame.transform.scale(sprite_antena, (40, high))
+
+    # A base da antena é alinhada embaixo
+    rect = antena_resized.get_rect(midbottom=(pose[0], pose[1]))
+    janela.blit(antena_resized, rect)
 
 # Função para atualizar valores
 def atualizar_valores():
@@ -76,10 +104,10 @@ def atualizar_valores():
     except ValueError:
         pass
 
-def draw_earth():
-    pygame.draw.arc(janela,(0,0,255))
+#def draw_earth():
+#    pygame.draw.arc(janela,(0,0,255))
 
-def draw_filled_semicircle(surface, color, center, radius, direction='up'):
+def draw_earth(surface, color, center, radius, direction='up'):
     """Desenha um semi-círculo preenchido.
     direction: 'up', 'down', 'left', 'right'"""
     points = [center]
@@ -110,7 +138,24 @@ def draw_filled_semicircle(surface, color, center, radius, direction='up'):
             points.append((x, y))
 
     pygame.draw.polygon(surface, color, points)
+    
+def draw_los(rx_pose,tx_pose,rx_high,tx_high):
+    # Topo da TX
+    tx_top = (tx_pose[0], tx_pose[1] - tx_high)
 
+    # Topo da RX
+    rx_top = (rx_pose[0], rx_pose[1] - rx_high)
+
+    # Linha de visada (amarela)
+    pygame.draw.line(janela, (255, 255, 0), tx_top, rx_top, 2)
+def draw_earth_sprite(surface, center, radius):
+    # Redimensiona sempre que mudar o raio
+    
+    earth_resized = pygame.transform.scale(earth_pic, (2.6*radius, 2.1*radius))
+    
+    # Coloca a Terra centralizada no mesmo ponto que o semi-círculo
+    rect = earth_resized.get_rect(center=(center[0], center[1]))
+    surface.blit(earth_resized, rect)
 
 # Loop principal
 clock = pygame.time.Clock()
@@ -126,6 +171,7 @@ while True:
         elif evento.type == pygame.KEYDOWN:
             if evento.key == pygame.K_UP:
                 rx_high += 5
+                earth_radius+=5
             elif evento.key == pygame.K_DOWN:
                 rx_high -= 5
             elif evento.key == pygame.K_RIGHT:
@@ -146,23 +192,46 @@ while True:
             if evento.ui_element in [rx_high_text, tx_high_text, distance_text]:
                 atualizar_valores()
 
+    ceu_offset -= velocidade_ceu * time_delta
+    if ceu_offset <= -LARGURA:  # reset quando sair da tela
+        ceu_offset = 0
+
+    # Desenha o fundo duas vezes para criar o loop
+    janela.blit(ceu, (ceu_offset, 0))
+    janela.blit(ceu, (ceu_offset + LARGURA, 0))
+
     # Atualiza a GUI
     manager.update(time_delta)
 
-    # Preenche o fundo
-    janela.fill((0, 0, 0))
+    
+    draw_earth(janela, (0,0,255), earth_center, earth_radius, direction='up')
+    draw_earth_sprite(janela, earth_center, earth_radius)
 
     # Desenha antenas
-    draw_antena(rx_pose, rx_high, (255, 255, 255))
-    tx_x = min(rx_pose[0] + distance, LARGURA - 10)
-    draw_antena([tx_x, rx_pose[1]], tx_high, (0, 255, 0))
+
+    tx_pose = [ earth_center[0]+earth_radius*math.cos(-tx_angle),
+                earth_center[1]+earth_radius*math.sin(-tx_angle)]
+    
+    draw_antena(tx_pose, tx_high, (0, 255, 0))
+    
+    theta = distance/earth_radius ## comprimento do arco distance = r*theta
+
+    rx_theta = tx_angle - theta
+
+    rx_pose = [ earth_center[0]+earth_radius*math.cos(-rx_theta),
+                earth_center[1]+earth_radius*math.sin(-rx_theta)]
+    
+    draw_antena(rx_pose, rx_high, (255, 0, 0))
+    
+    draw_los(rx_pose,tx_pose,rx_high,tx_high)
+    
+    
 
     # Exibe valores na tela
     font = pygame.font.SysFont(None, 24)
     info_text = font.render(f"RX: {rx_high} | TX: {tx_high} | Dist: {distance}", True, (255, 255, 0))
     janela.blit(info_text, (10, 10))
 
-    draw_filled_semicircle(janela, (255, 0, 0), (200, 200), 100, direction='up')
 
 
     # Desenha a GUI
